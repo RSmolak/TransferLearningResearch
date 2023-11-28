@@ -8,10 +8,11 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 # Lists for datasets and models
 DATASETS = []
 MODELS = [
-    #models.alexnet(pretrained=True),
+    models.alexnet(pretrained=True),
     models.vgg16(pretrained=True),
     #models.resnet50(pretrained=True)
 ]
@@ -101,10 +102,11 @@ for model in MODELS:
         print("Epoch", epoch)
         model.train()
         running_loss = 0.0
+        num_batches = len(train_set.data) // BATCH_SIZE
         for batch, (images, labels) in enumerate(train_loader):
             images = images.to(device)
             labels = labels.to(device)
-            print("Batch:", batch)
+            print("\rBatch:", batch, '/', num_batches, end ='')
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
