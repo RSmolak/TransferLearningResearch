@@ -11,14 +11,14 @@ import matplotlib.pyplot as plt
 # Lists for datasets and models
 DATASETS = []
 MODELS = [
-    models.alexnet(pretrained=True),
+    #models.alexnet(pretrained=True),
     models.vgg16(pretrained=True),
-    models.resnet50(pretrained=True)
+    #models.resnet50(pretrained=True)
 ]
 
 # Hyperparmeters
-EPOCHS = 100
-BATCH_SIZE = 64
+EPOCHS = 3
+BATCH_SIZE = 100
 
 
 # CIFAR-10 Data Loaders
@@ -34,25 +34,77 @@ train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
 test_set = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
 test_loader = DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using:", device)
 
+num_classes = len(train_set.classes)
 for model in MODELS:
-    # Replace the final layer for CIFAR-10
-    if isinstance(model, models.AlexNet) or isinstance(model, models.VGG):
-        num_features = model.classifier[6].in_features
-        model.classifier[6] = nn.Linear(num_features, 10)
+    if isinstance(model, models.AlexNet):
+        dropout = 0.5
+        model.classifier = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(256 * 6 * 6, 4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=dropout),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, num_classes),
+        )
+        print("Classifier for model has been changed.")
+
+        # Freezing the feature extraction layers
+        for param in model.parameters():
+            param.requires_grad = False
+        for param in model.classifier.parameters():
+            param.requires_grad = True
+
+    elif isinstance(model, models.VGG):
+        dropout = 0.5
+        model.classifier = nn.Sequential(
+            nn.Linear(512 * 7 * 7, 4096),
+            nn.ReLU(True),
+            nn.Dropout(p=dropout),
+            nn.Linear(4096, 4096),
+            nn.ReLU(True),
+            nn.Dropout(p=dropout),
+            nn.Linear(4096, num_classes),
+        )
+        print("Classifier for model has been changed.")
+
+        # Freezing the feature extraction layers
+        for param in model.parameters():
+            param.requires_grad = False
+        for param in model.classifier.parameters():
+            param.requires_grad = True
+
     elif isinstance(model, models.ResNet):
-        num_features = model.fc.in_features
-        model.fc = nn.Linear(num_features, 10)
+        dropout = 0.5
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 10)
+        print("Classifier for model has been changed.")
+
+        for param in model.parameters():
+            param.requires_grad = False
+        for param in model.fc.parameters():
+            param.requires_grad = True
+
 
     # Loss Function and Optimizer
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
+    model.to(device)
+
     # Training and Validation
+    print("Training starts")
     for epoch in range(EPOCHS):
+        print("Epoch", epoch)
         model.train()
         running_loss = 0.0
-        for images, labels in train_loader:
+        for batch, (images, labels) in enumerate(train_loader):
+            images = images.to(device)
+            labels = labels.to(device)
+            print("Batch:", batch)
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
@@ -67,6 +119,7 @@ for model in MODELS:
         total = 0
         with torch.no_grad():
             for images, labels in test_loader:
+                images, labels = images.to(device), labels.to(device)
                 outputs = model(images)
                 loss = criterion(outputs, labels)
                 val_loss += loss.item()
